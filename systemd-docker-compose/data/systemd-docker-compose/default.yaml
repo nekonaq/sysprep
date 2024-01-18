@@ -1,0 +1,12 @@
+---
+systemd-docker-compose::settings:
+  package_name: ''
+  service_name: ~
+
+  unit.service_file_path: /etc/systemd/system/docker-compose@.service
+
+systemd-docker-compose::options::unit.service:
+  start_limit_burst: 3
+  start_limit_interval_sec: 20
+  reload_signal: HUP
+  timeout_start_sec: 180s

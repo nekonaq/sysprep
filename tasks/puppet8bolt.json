@@ -1,0 +1,21 @@
+{
+  "description": "Install puppet8-{bolt,agent}",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/install@puppet8-bolt"},
+    "args": {"default": "" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/install@puppet8-bolt",
+    "sysprep/tasks/requirements/install@puppet8-bolt.yml",
+    "sysprep/tasks/requirements/install@",
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/puppet8.ubuntu"
+  ]
+}

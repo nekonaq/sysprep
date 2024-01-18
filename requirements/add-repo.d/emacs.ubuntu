@@ -1,0 +1,13 @@
+# see: https://launchpad.net/~kelleyk/+archive/ubuntu/emacs
+#
+#@ppa ppa:kelleyk/emacs
+
+# [2023-10-26] ubuntu にバンドルされている emacs バージョン
+# 				; ppa:kelleyk/emacs
+# - ubuntu 22.04 jammy	; 27.1	; 28
+# - ubuntu 20.04 focal	; 26.3	; 28 27 26 25
+# - ubuntu 18.04 bionic	; 25.2	; 28 27 26 25
+
+# Local Variables:
+# mode: conf
+# End:

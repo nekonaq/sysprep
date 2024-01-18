@@ -1,0 +1,13 @@
+# ubuntu	package		version
+# ------	-------		-------
+# 23.04		vagrant		2.3.4+dfsg-1ubuntu1
+# 22.04 LTS	vagrant		2.2.19+dfsg-1ubuntu1
+# 21.10		vagrant		2.2.14+dfsg-1ubuntu1
+# 20.04 LTS	vagrant		2.2.6+dfsg-2ubuntu3
+# 19.10		vagrant		2.2.3+dfsg-1ubuntu2
+# 18.04 LTS	vagrant		2.0.2+dfsg-2ubuntu8
+
+---
+packages::ubuntu:
+  repo::hashicorp: repo:hashicorp
+  vagrant: vagrant

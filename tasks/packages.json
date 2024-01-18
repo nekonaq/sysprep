@@ -1,0 +1,19 @@
+{
+  "description": "Install required packages",
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/packages"},
+    "args": {"default": "--pre-update --install" },
+    "autoremove" : {"default": "yes"},
+    "upgrade" : {},
+    "add" : {}
+  },
+  "files": [
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/packages.yml"
+  ]
+}

@@ -1,0 +1,123 @@
+---
+$defs:
+
+  - &packages-apt-supp
+    apt-supp:
+      - [ca-certificates, software-properties-common, apt-transport-https, gnupg2]
+      # ca-certificates                    # misc		important
+      # software-properties-common         # admin		optional
+      # apt-transport-https                # universe/admin	optional
+      # gnupg2                             # universe/utils	extra
+
+  - &packages-apt-utils
+    apt-utils:
+      - [aptitude, apt-rdepends]
+      # aptitude                           # universe/admin	optional
+      # apt-rdepends                       # universe/utils	optional
+
+  - &packages-utils
+    utils-base:
+      - [gawk, wget, curl, wget, git, rsync, openssh-client]
+      # gawk                               # interpreters	optional
+      # curl                               # web		optional
+      # wget                               # web		standard
+      # git                                # vcs		optional
+      # rsync                              # net		standard
+      # openssh-client                     # net		standard
+
+      - [tree, jq, httpie]
+      # tree                               # universe/utils	optional
+      # jq                                 # utils		optional
+      # httpie                             # universe/web	extra
+
+      # ncurses-bin                        # utils		required	; clear tget
+      - colorized-logs                     # universe/text	optional	; ansi2txt
+      - uuid-runtime                       # libs		standard	; uuidgen
+
+    utils-compress:
+      - xz-utils                           # utils		standard
+      - zip                                # utils		optional
+      - unzip                              # utils		optional
+
+    utils-sys:
+      - [htop, lsof]
+      # htop                               # utils		optional
+      # lsof                               # utils		standard
+
+    utils-net:
+      - [bind9-host, dnsutils, traceroute]
+      # bind9-host                         # net		standard
+      # dnsutils                           # universe/net	optional
+      # traceroute                         # universe/net	optional
+
+    utils-fs:
+      - [squashfs-tools, fuse3, sshfs, squashfuse, fuseiso]
+      # squashfs-tools                     # admin		optional
+      # fuse3                              # utils		standard
+      # sshfs                              # universe/utils	optional
+      # squashfuse                         # universe/utils	optional
+      # fuseiso                            # universe/admin	optional
+
+    utils-r10k:
+      - r10k                               # universe/ruby	optional
+
+  - &packages-devel
+    devel:
+      - build-essential                    # devel		optional
+      - [gcc, make, patch]
+      # gcc                                # devel		optional
+      # make                               # devel		optional
+      # patch                              # utils		optional
+      - pkg-config                         # devel		optional
+
+  - &packages-devel-cli
+    devel-cli:
+      - openssl                            # utils		important
+      - sqlite3                            # misc		optional
+      - mariadb-client                     # universe/database	optional
+      - redis-tools                        # universe/database	optional
+
+  - &packages-devel-utils
+    devel-utils:
+        - cscope                           # universe/devel	optional
+
+  - &packages-python
+    python3:
+      - python3-venv                       # universe/python	optional
+      # python3-pip                        # universe/python	optional
+      - python3-keyring                    # python		optional
+
+  - &packages-python-buildlib
+    python-buildlib:
+      - libbz2-dev                         # libdevel		optional
+      - libffi-dev                         # libdevel		extra
+      - liblzma-dev                        # libdevel		extra
+      - libreadline-dev                    # libdevel		optional
+      - libsqlite3-dev                     # libdevel		optional
+      - libssl-dev                         # libdevel		optional
+      - libyaml-dev                        # libdevel		extra
+      - zlib1g-dev                         # libdevel		optional
+
+      - xz-utils                           # utils		standard
+
+      - libpcre3-dev                       # libdevel		optional
+      - libmariadb-dev                     # universe/libdevel	optional
+
+packages::ubuntu22:
+  &packages-ubuntu
+  <<: *packages-apt-supp
+  <<: *packages-apt-utils
+  <<: *packages-utils
+  <<: *packages-devel
+  <<: *packages-devel-cli
+  <<: *packages-devel-utils
+  <<: *packages-python
+  <<: *packages-python-buildlib
+
+packages::ubuntu18:
+  <<: *packages-ubuntu
+  utils-fs:
+    - [squashfs-tools, fuse, sshfs, squashfuse, fuseiso]
+
+packages::ubuntu:
+  <<: *packages-ubuntu

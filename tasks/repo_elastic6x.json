@@ -1,0 +1,17 @@
+{
+  "description": "Install elastic-6.x repo",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/add-repo"},
+    "args": {"default": "--install elastic-6.x" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/elastic-6.x.ubuntu"
+  ]
+}

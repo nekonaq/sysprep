@@ -1,0 +1,104 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+
+RCSID='$Id: setup-python-pyenv,v 1.10 2024/01/18 21:14:14 nak Exp nak $'
+REPO_BASE_DEFAULT=https://github.com/pyenv
+
+usage() {
+  echo "$prog: sorry, no help available" >&2
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version,remote: --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  local repo_base="$REPO_BASE_DEFAULT"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --remote)
+        repo_base="$2"
+        shift
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  local pyenv_root="${1:-$HOME/.pyenv}"
+  if [ -e "$pyenv_root" ]; then
+    echo "$prog: pyenv root already exists: $pyenv_root" >&2
+    return
+  fi
+
+  ( set -x
+    git clone "$repo_base/pyenv.git" "$pyenv_root"
+  )
+
+  local plugin
+  for plugin in pyenv-doctor pyenv-installer pyenv-update pyenv-virtualenv pyenv-which-ext; do
+    ( set -x
+      git clone "$repo_base/$plugin.git" "$pyenv_root/plugins/$plugin"
+    )
+  done
+
+  local pyenv_init="$pyenv_root/init.sh"
+  ( cat <<EOF
+# -*- sh -*-
+
+if ! command -v pyenv >/dev/null; then
+  export PATH="$pyenv_root/bin:\$PATH"
+  eval "\$( pyenv init - )"
+  eval "\$( pyenv virtualenv-init - )"
+fi
+EOF
+    ) | (
+    set -x
+    install -m 644 /dev/stdin "$pyenv_init"
+  )
+
+#   if [ "${pyenv_root%/*}" = "$HOME" ]; then
+#     local bashrc="$HOME/.bashrc"
+#     if ! grep -q '^#@python' "$bashrc" 2>/dev/null; then
+#       cat <<EOF >>"$bashrc"
+# #@python
+# if [ -e '$pyenv_init' ]; then
+#   . '$pyenv_init'
+# fi
+# EOF
+#     fi
+#   fi
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

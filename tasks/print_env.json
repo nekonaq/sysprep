@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "print_env.sh"}
+  ]
+}

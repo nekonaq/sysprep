@@ -1,0 +1,17 @@
+{
+  "description": "Install hashicorp repo",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/add-repo"},
+    "args": {"default": "--install hashicorp" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/hashicorp.ubuntu"
+  ]
+}

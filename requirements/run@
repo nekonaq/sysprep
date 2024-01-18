@@ -1,0 +1,88 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+me="$( realpath "$0" )"
+here="${me%/*}"
+run="${PT__noop:+: }"
+
+RCSID='$Id: run@,v 1.2 2024/01/24 22:09:08 nak Exp nak $'
+
+usage() {
+  echo "$prog: sorry, no help available" >&2
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+main() {
+  exec 2>&1
+
+  ARGS=$( getopt --name $prog --long help,version,dry-run --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  if [ -z "$PT__task" ]; then
+    echo "$prog: no task specified" >&2
+    exit 1
+  fi
+
+  local prefix="${prog%@}"
+  local task="${PT_exec:-$prefix@${PT__task##*::}}"
+  if [ -n "$run" ]; then
+    cat <<EOF >&2
+##   prog: $prog
+##     me: $me
+##   here: $here
+##   args: $@
+##   task: $task
+EOF
+    env | (
+      echo "##+BEGIN env"
+      grep '^PT_' ||:
+      echo "##+END"
+    ) >&2
+
+    ( set -x
+      ls -la "$PT__installdir/$task" ||:
+    ) >&2
+  fi
+
+  ( set -x
+    exec "$PT__installdir/$task" ${PT__noop:+--dry-run} $PT_args
+  )
+}
+
+main "$@"

@@ -1,0 +1,15 @@
+.python*
+.vagrant
+*.log
+# bolt
+/modules
+/Puppetfile
+/.modules*
+/.resource_types
+/.rerun.json
+/.*_cache.json
+/bolt-debug.log
+
+# Local Variables:
+# mode: conf
+# End:

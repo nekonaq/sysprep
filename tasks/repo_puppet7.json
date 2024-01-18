@@ -1,0 +1,17 @@
+{
+  "description": "Install puppet7 repo",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/add-repo"},
+    "args": {"default": "--install puppet7" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/puppet7.ubuntu"
+  ]
+}

@@ -1,0 +1,18 @@
+# -*- mode: org; buffer-read-only: nil; truncate-lines: nil; fill-column: 84 -*-
+#+STARTUP: showall
+#+OPTIONS: ^:{} toc:nil num:nil date:nil author:nil *:nil \n:nil
+#+BIND: org-html-toplevel-hlevel 3
+
+* systemd-docker-compose
+
+  docker-compose で定義したサービスを systemd で制御する。
+
+  このディレクトリで、サービス・テンプレートを手動インストール/アンインストールする
+  こともできる。(この場合、テンプレートのオプション値はデフォルト値固定になる)
+
+  手動でインストールする:
+  : make install
+
+  手動でアンインストールする:
+  : make remove
+

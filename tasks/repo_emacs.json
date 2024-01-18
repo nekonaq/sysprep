@@ -1,0 +1,17 @@
+{
+  "description": "Install ppa:kelleyk/emacs",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/add-repo"},
+    "args": {"default": "--install emacs" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/emacs.ubuntu"
+  ]
+}
