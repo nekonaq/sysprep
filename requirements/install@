@@ -1,0 +1,107 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+me="$( realpath "$0" )"
+here="${me%/*}"
+run="${PT__noop:+: }"
+
+RCSID='$Id: install@,v 1.6 2024/01/24 22:09:16 nak Exp nak $'
+
+usage() {
+  echo "$prog: sorry, no help available" >&2
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+conf_hook() {
+  local conf="$1"
+  echo "$conf"
+}
+
+main() {
+  exec 2>&1
+
+  ARGS=$( getopt --name $prog --long help,version,dry-run --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  if [ "$prog" = 'install@' ]; then
+    echo "$prog: this is a template script. use with symlink" >&2
+    exit 1
+  fi
+
+  local conf="$here/$prog.yml"
+  local hook="$here/$prog.hook"
+  if [ -f "$hook" ]; then
+    . "$hook"
+    conf="$( conf_hook "$conf" )"
+  fi
+
+  if [ -n "$run" ]; then
+    cat <<EOF >&2
+## prog: $prog
+##   me: $me
+## here: $here"
+## args: $@
+## name: $name
+## conf: $conf
+EOF
+    env | (
+      echo "##+BEGIN env"
+      grep '^PT_' ||:
+      echo "##+END"
+    ) >&2
+  fi
+
+  if [ ! -e "$conf" ]; then
+    echo "$prog: no configuration file found: $conf" >&2
+    return 1
+  fi
+  ( set -x
+    "$here/packages" ${run:+--dry-run} -f "$conf" --install "$@"
+  )
+
+  local postrun="$here/$prog.postrun"
+  if [ ! -x "$postrun" ]; then
+    return
+  fi
+  ( set -x
+    "$postrun" ${run:+--dry-run}
+  )
+}
+
+main "$@"

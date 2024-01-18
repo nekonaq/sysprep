@@ -1,0 +1,81 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+
+RCSID='$Id: setup-python-venv,v 1.2 2024/01/18 21:14:26 nak Exp nak $'
+
+usage() {
+  echo "$prog: sorry, no help available" >&2
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  local venv_root="${1:-$HOME/.venv}"
+  if [ -e "$venv_root" ]; then
+    echo "$prog: venv root already exists: $venv_root" >&2
+    return
+  fi
+
+  ( set -x
+    /usr/bin/python3 -mvenv "$venv_root"
+  )
+
+  local venv_init="$venv_root/init.sh"
+  ( set -x
+    ln -sr "$venv_root/bin/activate" "$venv_init"
+  )
+
+#   if [ "${venv_root%/*}" = "$HOME" ]; then
+#     local bashrc="$HOME/.bashrc"
+#     if ! grep -q '^#@python' "$bashrc" 2>/dev/null; then
+#       cat <<EOF >>"$bashrc"
+# #@python
+# if [ -e '$venv_init' ]; then
+#   . '$venv_init'
+# fi
+# EOF
+#     fi
+#   fi
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

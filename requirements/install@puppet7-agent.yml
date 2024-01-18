@@ -1,0 +1,4 @@
+---
+packages::ubuntu:
+  repo:puppet: repo:puppet7
+  puppet-agent: puppet-agent

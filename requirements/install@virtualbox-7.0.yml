@@ -1,0 +1,7 @@
+---
+packages::ubuntu:
+  repo::virtualbox: repo:virtualbox
+  virtualbox: virtualbox-7.0
+
+  repo:hashicorp: repo:hashicorp
+  vagrant: vagrant

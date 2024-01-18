@@ -1,0 +1,7 @@
+# see: https://www.puppet.com/docs/puppet/8/install_puppet.html
+#
+#@deb https://apt.puppet.com/puppet8-release-$VERSION_CODENAME.deb
+
+# Local Variables:
+# mode: conf
+# End:

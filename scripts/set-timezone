@@ -1,0 +1,152 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+run="${PT__noop:+: }"
+
+RCSID='$Id: set-timezone,v 1.5 2024/01/18 21:14:57 nak Exp nak $'
+
+usage() {
+  cat <<EOF
+Usage:
+  $prog [OPTION...] [TIMEZONE]
+
+  システムのタイムゾーンを設定する。
+  パラメータを指定しない場合は現在のタイムゾーンを表示する。
+
+Options:
+  -h, --help           このヘルプを表示する。
+  --version            プログラムのバージョンを表示する。
+
+Example:
+  $prog Japan
+
+EOF
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+ensure_root() {
+  if [ "$( id -u )" != 0 ]; then
+    echo "$prog: You must be a root." >&2
+    return 1
+  fi
+}
+
+get_timezone() {
+  local tz="$( cat /etc/timezone )"
+  # echo "${tz##*/}" 
+  echo "$tz"
+}
+
+timezone__() {
+  local value="$1"
+  if [ -z "$value" ]; then
+    timezone__show
+    return
+  fi
+  timezone__test "$value"
+}
+
+timezone__show() {
+  local value="$1"
+  echo "timezone: [$( get_timezone )]"
+}
+
+timezone__test() {
+  local value="$1"
+  [ "$value" = "$( get_timezone )" ]
+}
+
+timezone__update() {
+  local value="$1"
+  if ! timezone__test "$value"; then
+    timezone__set "$value"
+  fi
+}
+
+timezone__set() {
+  local timezone="$1"
+  ensure_root
+  ( set -x
+    ${run}timedatectl set-timezone "$timezone"
+  ) || (
+    # dbus が動作していない場合の処置
+    local zoneinfo="$( readlink -e "/usr/share/zoneinfo/$timezone" )"
+    if [ -z "$zoneinfo" ]; then
+      echo "invalid timezone: $timezone" >&2
+      exit 1
+    fi
+    set -x
+    ln -sf "$zoneinfo" /etc/localtime
+    dpkg-reconfigure --frontend noninteractive tzdata
+  )
+}
+
+main() {
+  if [ -n "$PT__task" ]; then
+    exec 2>&1
+    set -- "$PT_value"
+
+    local epp_arg='<%= $op %>'
+    case "$epp_arg" in
+      \<*) ;;
+      *) PT_op="$epp_arg";;
+    esac
+  fi
+
+  ARGS=$( getopt --name $prog --long help,version,dry-run,test --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  local op="${PT_op:-update}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --test)
+        op=test
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --)
+        shift
+        break
+        ;;
+    esac
+    shift
+  done
+
+  local timezone="$1"
+  if [ -z "$timezone" ]; then
+    timezone__show
+    return
+  fi
+  "timezone__$op" "$timezone"
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

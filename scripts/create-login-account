@@ -1,0 +1,238 @@
+#!/bin/sh
+set -e
+prog="${0##*/}"
+run=
+
+RCSID='$Id: create-login-account,v 2.7 2023/11/08 18:49:35 nak Exp nak $'
+
+usage() {
+  cat <<EOF
+Usage:
+  $prog [OPTION...] USER [SSHKEYS_FROM]]
+
+オペレーション用のユーザーを追加する。 
+
+  - USER が指定されていれば useradd または usermod する。
+
+  - SSHKEYS_FROM が指定されていれば authorized_keys に取り込む。
+    SSHKEYS_FROM の形式は次のいずれか:
+        - gh:[ACCOUNT]
+          github の ACCOUNT (省略時はアカウント USER) から取得。
+
+        - gl:[ACCOUNT]
+          gitlab の ACCOUNT (省略時はアカウント USER) から取得。
+
+        - SSHKEYS_URL
+          指定した URL から取得。
+
+Options:
+  --wheel              wheel グループを作成する。
+
+  -G, --groups GROUP1[,GROUP2...]
+                       ユーザーが属する補助グループのリストを指定する。
+                       システムに存在しないグループは無視する。
+
+  -s, --shell SHELL    ユーザーのログイン・シェルを指定する。
+
+  -u, --uid UID        ユーザーの uid を指定する。
+                       usermod の場合、このオプションは無視する。
+
+  -h, --help           このヘルプを表示する。
+  --version            プログラムのバージョンを表示する。
+
+EOF
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version"
+}
+
+ensure_root() {
+  if [ "$( id -u )" != 0 ]; then
+    echo "$prog: You must be a root." >&2
+    return 1
+  fi
+}
+
+add_wheel_group() {
+  if ! getent group wheel >/dev/null; then
+    ( set -x
+      ${run}groupadd -g 11 wheel
+    )
+  fi
+}
+
+add_wheel_sudoers() {
+  local dest=/etc/sudoers.d/wheel
+  if [ ! -e "$dest" ]; then
+    ( set -x
+      ${run}install -o root -g root -m 644 /dev/stdin "$dest" <<EOF
+%wheel ALL=(ALL) NOPASSWD:ALL
+EOF
+    )
+  fi
+}
+
+purify_groups__() {
+  echo "$1" | xargs -d, -n1 |
+    awk '/^$/ {next} !seen[$1]++ {printf("%s,", $1)}'
+}
+
+purify_groups() {
+  local groups="$( purify_groups__ "$1" )"
+  echo "${groups%,}"
+}
+
+add_wheel_user() {
+  local user="$1" uid="$2" shell="$3"
+  local groups="$( purify_groups "$4" )"
+
+  if getent passwd "$user" >/dev/null; then
+    ( set -x
+      ${run}usermod "$user" ${shell:+-s "$shell"} ${groups:+-aG "$groups"}
+    )
+  else
+    ( set -x
+      ${run}useradd "$user" -m ${uid:+-u "$uid"} ${shell:+-s "$shell"} ${groups:+-G "$groups"}
+    )     
+  fi
+}
+
+parse_sshkeys_from() {
+  local user="$1" sshkeys_from="$2"
+  case "$sshkeys_from" in
+    gh:|gh:*)
+      sshkeys_from="github:${sshkeys_from#*:}"
+      ;;
+    gl:|gl:*)
+      sshkeys_from="gitlab:${sshkeys_from#*:}"
+  esac
+  
+  case "$sshkeys_from" in
+    github:|gitlab:)
+      printf 'https://%s.com/%s.keys\n' "${sshkeys_from%:*}" "$user"
+      ;;
+    github:*|gitlab:*)
+      printf 'https://%s.com/%s.keys\n' "${sshkeys_from%:*}" "${sshkeys_from#*:}"
+      ;;
+    *)
+      echo "$sshkeys_from"
+  esac
+}
+
+VAGRANT_INSECURE_KEY='ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key'
+
+get_sshkeys() {
+  local sshkeys_file="$1" sshkeys_from="$2"
+  cat "$sshkeys_file" 2>/dev/null ||:
+
+  if [ "$sshkeys_from" = --vagrant ]; then
+    echo "$VAGRANT_INSECURE_KEY"
+  else
+    set -x
+    curl -fsSL "$sshkeys_from"
+  fi
+}
+
+add_sshkeys_from() {
+  local user="$1"
+  local sshkeys_from="$( parse_sshkeys_from "$user" "$2" )"
+  if [ -z "$sshkeys_from" ]; then
+    return
+  fi
+
+  local group="$( id -gn "$user" )"
+  if [ -z "$group" ]; then
+    return 1
+  fi
+  local home="$( getent passwd "$user" | awk -F: '{print $6}' )"
+  local sshkeys_file="$home/.ssh/authorized_keys"
+
+  local sshkeys="$( get_sshkeys "$sshkeys_file" "$sshkeys_from" )"
+  if [ -z "$sshkeys" ]; then
+    return 1
+  fi
+
+  echo "$sshkeys" | awk '/^#?$/ {next} !seen[$1 $2]++ {print}' | (
+    set -x
+    ${run}install -o "$user" -g "$group" -m 700 -d "$home/.ssh"
+    ${run}install -o "$user" -g "$group" -m 600 /dev/stdin "$sshkeys_file"
+  )
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version,dry-run,wheel,uid:,shell:,groups:,vagrant --options hu:s:G: -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  local wheel uid shell=/bin/bash groups
+  local vagrant=
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --wheel)
+        wheel=yes
+        ;;
+      --uid|-u)
+        uid="$2"
+        shift
+        ;;
+      --shell|-s)
+        shell="$2"
+        shift
+        ;;
+      --groups|-G)
+        groups="$2"
+        shift
+        ;;
+      --vagrant)
+        vagrant="$1"
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  ${run}ensure_root
+  if [ -n "$wheel" ]; then
+    add_wheel_group
+    add_wheel_sudoers
+  fi
+
+  local user="$1" sshkeys_from="${vagrant:-$2}"
+  if [ -n "$user" ]; then
+    local suffix="${user#*/}"
+    if [ "$suffix" != "$user" ]; then
+      sshkeys_from="$suffix"
+    fi
+    user="${user%%/*}"
+
+    add_wheel_user "$user" "$uid" "$shell" "${wheel:+wheel,}$groups"
+    add_sshkeys_from "$user" "$sshkeys_from"
+  fi
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

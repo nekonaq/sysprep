@@ -1,0 +1,307 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+me="$( realpath "$0" )"
+here="${me%/*}"
+run="${PT__noop:+: }"
+
+RCSID='$Id: packages,v 3.2 2024/01/24 22:07:33 nak Exp nak $'
+
+usage() {
+  cat <<EOF
+Usage: $prog [OPTION...]
+
+yaml で記述したパッケージ定義を元に、パッケージをインストールする。
+
+   パッケージ定義は packages スクリプトと同じ場所にある $prog.yml に書いておく。
+
+Options:
+   --list            インストールするパッケージの一覧を表示する。(デフォルト)
+   --install         パッケージをインストールする。
+   -f, --file=PATH   パッケージ定義ファイルを指定する。
+   --pre-update, --update
+                     最初に apt-get update する。
+   --upgrade         インストール前に apt-get upgrade する。
+   --dist-upgrade    インストール前に apt-get dist-upgrade する。
+   --autoremove      最後に apt-get autoremove する。
+   --dry-run         コマンドを表示するだけで実行しない。
+   -h, --help        このヘルプを表示する。
+   --version         バージョンを表示する。
+
+EOF
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+ensure_root() {
+  if [ "$( id -u )" != 0 ]; then
+    echo "$prog: You must be a root." >&2
+    return 1
+  fi
+}
+
+replace_distro_info() {
+  sed -e 's!$ARCH!'"$ARCH"'!' \
+      -e 's!$ID!'"$ID"'!' \
+      -e 's!$VERSION_ID!'"$VERSION_ID"'!' \
+      -e 's!$VERSION_CODENAME!'"$VERSION_CODENAME"'!' \
+  ;
+}
+
+get_packages() {
+  local src="$1"
+  shift
+  cat "$src" |
+    /usr/bin/python3 -c '
+import sys, yaml
+flatten = lambda arg: [item for el in arg for item in (flatten(el) if isinstance(el, list) else [el])]
+confdict = yaml.safe_load(sys.stdin)
+for osver in sys.argv[1:]:
+    pkgs = list((confdict.get("packages::{}".format(osver)) or {}).values())
+    if not bool(pkgs):
+        continue
+    pkgs_flatten = sorted(list(set(flatten(pkgs))))
+    print(" ".join(pkgs_flatten))
+' "$@"
+}
+
+list_absent_packages() {
+  # インストールされていないパッケージの一覧を返す
+  local pkg
+  for pkg in "$@"; do
+    dpkg-query -Wf '${db:Status-Abbrev} ${Package}\n' "$pkg" 2>/dev/null ||
+      echo "-- $pkg"
+  done |
+    awk '!/^.i/ { print $2 }' |
+    sort | uniq | paste -sd' '
+}
+
+packages__list() {
+  local opts="$1"
+  shift
+  for pkg in $@; do
+    case "$pkg" in
+      *.deb)
+        echo "$( echo -n "$pkg" | replace_distro_info )"
+        ;;
+      *)
+        echo "$pkg"
+        ;;
+    esac
+  done | paste -sd' '
+}
+
+packages__apt_update() {
+  ( set -x
+    ${run}apt-get update -q
+  )
+}
+
+packages__apt_upgrade() {
+  ( set -x
+    ${run}apt-get upgrade -yq
+  )
+}
+
+packages__apt_dist_upgrade() {
+  ( set -x
+    ${run}apt-get dist-upgrade -yq
+  )
+}
+
+packages__apt_autoremove() {
+  ( set -x
+    ${run}apt-get autoremove -yq
+  )
+}
+
+packages__apt_install() {
+  local opts="$1"
+  shift
+  ensure_root
+
+  case "$opts" in
+    *:pre-update:*)
+      packages__apt_update
+      ;;
+  esac
+
+  case "$opts" in
+    *:upgrade:*)
+      packages__apt_upgrade "$opts"
+      ;;
+    *:dist-upgrade:*)
+      packages__apt_dist_upgrade "$opts"
+      ;;
+  esac
+
+  local repos debs pkgs
+  for pkg in $@; do
+    case "$pkg" in
+      repo:*)
+        repos="$repos ${pkg##repo:}"
+        ;;
+      *.deb)
+        debs="$debs $pkg"
+        ;;
+      *)
+        pkgs="$pkgs $pkg"
+        ;;
+    esac
+  done
+
+  eval set -- "$repos"
+  local repo
+  for repo in "$@"; do
+    ( set -x
+      "$here/add-repo" ${run:+--dry-run} --no-update "$repo"
+    )
+  done
+  if [ $# -gt 0 ]; then
+    packages__apt_update "$opts"
+  fi
+
+  eval set -- "$debs"
+  local src
+  for src in "$@"; do
+    src="$( echo "$src" | replace_distro_info )"
+    local deb="/tmp/${src##*/}"
+    ( trap "rm -f '$deb'" EXIT
+      set -x
+      ${run}curl -fLR -o "$deb" "$src"
+      ${run}dpkg -i --force-confmiss "$deb"
+    )
+  done
+
+  local required="$( list_absent_packages $pkgs "$@" )"
+  eval set -- $required
+  if [ $# -le 0 ]; then
+    echo "$prog: no packages installed" >&2
+  else
+    ( set -x
+      export \
+        DEBIAN_FRONTEND=noninteractive \
+        DEBIAN_PRIORITY=critical \
+        DEBCONF_NONINTERACTIVE_SEEN=true \
+        DEBCONF_NOWARNINGS=yes \
+      ;
+      ${run}apt-get install -yq "$@"
+    )
+  fi
+
+  case "$opts" in
+    *:autoremove:*)
+      packages__apt_autoremove "$opts"
+      ;;
+  esac
+}
+
+main() {
+  if [ -n "$PT__task" ]; then
+    exec 2>&1
+
+    case "$PT_autoremove" in
+      yes|true|on)
+        set -- --autoremove "$@"
+        ;;
+    esac
+
+    case "$PT_upgrade" in
+      yes|true|on)
+        set -- --upgrade "$@"
+        ;;
+      dist)
+        set -- --dist-upgrade "$@"
+    esac
+
+    set -- "$@" $PT_add
+  fi
+
+  ARGS=$( getopt --name $prog --long help,version,dry-run,file:,list,install,pre-update,update,autoremove,upgrade,dist-upgrade --options hf:l -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: invalid parameter (use -h for help)" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  export ARCH="$( dpkg --print-architecture )"
+  export ID= VERSION_ID= VERSION_CODENAME=
+  . /etc/os-release
+
+  local op=list src="$0.yml" opts
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --list|-l)
+        op=list
+        ;;
+      --file|-f)
+        src="$2"
+        shift
+        ;;
+      --install)
+        case "$ID" in
+          ubuntu)
+            op=apt_install
+            ;;
+          *)
+            # 現在は ubuntu のみ
+            echo "$prog: unknown linux distribution: $ID" >&2
+            return 1
+            ;;
+        esac
+        ;;
+      --pre-update|--update)
+        opts="$opts:pre-update:"
+        ;;
+      --autoremove)
+        opts="$opts:autoremove:"
+        ;;
+      --upgrade)
+        opts="$opts:upgrade:"
+        ;;
+      --dist-upgrade)
+        opts="$opts:dist-upgrade:"
+        ;;
+      --)
+        shift
+        break
+        ;;
+    esac
+    shift
+  done
+
+  local packages="$(
+    get_packages "$src" "$ID$VERSION_ID" "$ID${VERSION_ID%%.*}" "$ID"
+  )"
+  if [ -z "$packages" ]; then
+    echo "$prog: no package definition for distro: $ID$VERSION_ID" >&2
+    return 1
+  fi
+
+  set -- "$@" $packages
+  "packages__$op" "$opts" "$@"
+}
+
+main "$@"

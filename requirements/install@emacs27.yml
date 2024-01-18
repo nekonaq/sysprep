@@ -1,0 +1,4 @@
+---
+packages::ubuntu:
+  repo::emacs: repo:emacs
+  emacs-nox: emacs27-nox

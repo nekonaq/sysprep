@@ -1,0 +1,4 @@
+---
+packages::ubuntu:
+  xrdp: xrdp
+  ubuntu-gnome-desktop: ubuntu-gnome-desktop

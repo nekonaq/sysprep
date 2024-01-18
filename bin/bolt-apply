@@ -1,0 +1,55 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+this="$( realpath -s "$0" )"
+top_dir="$( realpath -s "${this%/*}/.." )"
+
+RCSID='$Id: bolt-apply,v 1.2 2024/01/11 21:34:56 nak Exp nak $'
+
+usage() {
+  echo "$prog: sorry, no help available" >&2
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+main() {
+  case "$1" in
+    --help)
+      usage
+      exit
+      ;;
+    --version)
+      print_version
+      exit
+      ;;
+  esac
+
+  local action="${0##*bolt-}"
+  local ansi_term="$( tput sgr 0 >/dev/null || echo yes )"
+  local ansi2txt="$( command -v ansi2txt || echo /bin/cat )"
+  ( set -x
+    cd "$top_dir"
+    # bolt "$action" "$@" --log info 2>&1
+    bolt "$action" "$@" 2>&1
+  ) | (
+    grep --line-buffered -v -e '^[\[\{]' |
+      if [ -n "$ansi_term" ]; then
+        "$ansi2txt"
+      else
+        cat
+      fi
+  )
+}
+
+main "$@"

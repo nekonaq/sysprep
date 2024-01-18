@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/scripts/set-timezone"},
+    "value" : {},
+    "op" : {}
+  },
+  "files": [
+    "sysprep/tasks/scripts/set-timezone"
+  ]
+}

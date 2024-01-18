@@ -1,0 +1,20 @@
+{
+  "description": "Install docker-ce and docker-compose-plugin",
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/install@docker-ce"},
+    "args": {"default": "" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/install@docker-ce",
+    "sysprep/tasks/requirements/install@docker-ce.yml",
+    "sysprep/tasks/requirements/install@",
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/docker.ubuntu"
+  ]
+}

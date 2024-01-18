@@ -1,0 +1,40 @@
+[Unit]
+Description=%i service with docker-compose
+Requires=docker.service
+After=docker.service
+StartLimitBurst=<%= $options['start_limit_burst'] %>
+StartLimitIntervalSec=<%= $options['start_limit_interval_sec'] %>
+
+[Service]
+WorkingDirectory=/etc/default/docker-compose@%i
+<%#
+EnvironmentFile=/etc/default/systemd-docker-compose
+-%>
+
+ExecStartPre=-/usr/bin/docker compose kill
+ExecStartPre=-/usr/bin/docker compose rm -fv
+ExecStartPre=-/usr/bin/docker compose down
+
+ExecStart=/usr/bin/docker compose up --force-recreate
+<%#
+ExecStart=/usr/bin/docker compose up --force-recreate --abort-on-container-exit
+-%>
+
+ExecStop=/usr/bin/docker compose stop
+ExecStop=-/usr/bin/docker compose rm -fv
+ExecStop=-/usr/bin/docker compose down
+
+ExecReload=-/bin/sh -c "/usr/bin/docker compose kill -s <%= $options['reload_signal'] %>"
+<%#
+ExecReload=-/bin/sh -c "/usr/bin/docker compose kill -s $${RELOAD_SIGNAL:-HUP}"
+-%>
+
+Restart=always
+TimeoutStartSec=<%= $options['timeout_start_sec'] %>
+
+[Install]
+WantedBy=multi-user.target
+
+## Local Variables: ***
+## mode: conf ***
+## End: ***

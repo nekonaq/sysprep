@@ -1,0 +1,62 @@
+#!/bin/sh
+set -e
+prog="${0##*/}"
+
+RCSID='$Id: roaming,v 1.2 2022/09/30 04:01:21 nak Exp nak $'
+ROAMING_REPO=git@git.nekonaq.com:private/roaming.git
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version"
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        # usage
+        echo "$prog: sorry, no help available" >&2
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  local repo="${1:-$ROAMING_REPO}"
+  cd "$HOME"
+  local roaming_dir="$HOME/roaming"
+  if [ -e "$roaming_dir" ]; then
+    echo "$prog: roaming directory already exists: $HOME/roaming" >&2
+    return
+  fi
+
+  export GIT_SSH_COMMAND='ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PasswordAuthentication=no'
+  set -x
+  git clone -q "$repo" "$roaming_dir"
+  cd "$roaming_dir"
+  git submodule update -i
+  ./setup
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

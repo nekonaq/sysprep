@@ -1,0 +1,245 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+run=
+
+RCSID='$Id: add-repo,v 1.6 2024/01/24 22:06:21 nak Exp nak $'
+
+usage() {
+  cat <<EOF
+Usage: $prog [OPTION...] REPO...
+       $prog [OPTION...] [-l|--list]
+
+BLAH BLAH...
+
+Options:
+   --list            インストールできるリポジトリの一覧を表示する。(デフォルト)
+   --install         リポジトリをインストールする。
+   --no-update       リポジトリのインストール後に apt-get update しない。
+   --dry-run         コマンドを表示するだけで実行しない。
+   -h, --help        このヘルプを表示する。
+   --version         バージョンを表示する。
+
+EOF
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id -r "$0" )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+ensure_root() {
+  if [ "$( id -u )" != 0 ]; then
+    echo "$prog: You must be a root." >&2
+    return 1
+  fi
+}
+
+replace_distro_info() {
+  sed -e 's!$ARCH!'"$ARCH"'!' \
+      -e 's!$ID!'"$ID"'!' \
+      -e 's!$VERSION_ID!'"$VERSION_ID"'!' \
+      -e 's!$VERSION_CODENAME!'"$VERSION_CODENAME"'!' \
+  ;
+}
+
+add_repo__list() {
+  local opts="$1"
+  shift
+  local suffix
+  for suffix in "$ID${VERSION_ID%%.*}" "$ID$VERSION_ID" "$ID"; do
+    ( ls -1 "$0.d/"*."$suffix" 2>/dev/null ||: ) |
+      sed 's!^'"$0"'\.d/\(.\+\)\.'"$suffix"$'!\1!' |
+      sort | uniq
+  done
+}
+
+find_reposrc() {
+  local repo
+  for repo in $@; do
+    local src
+    for src in "$0.d/$repo.$ID${VERSION_ID%%.*}" "$0.d/$repo.$ID$VERSION_ID" "$0.d/$repo.$ID" NOTFOUND; do
+      if [ "$src" = NOTFOUND ]; then
+        echo "$prog: $repo: no repodefinition for: $ID$VERSION_ID" >&2
+        return 1
+      fi
+
+      if [ -f "$src" ]; then
+        break
+      fi
+    done
+    echo "$src"
+  done
+}
+
+install_gpg_keys() {
+  local reponame="$1" reposrc="$2"
+  local keydef
+
+  awk '$1 == "#@key" { printf("name=%s; loc=%s;\n", $2, $3) }' "$reposrc" |
+    while read keydef; do
+      local name= loc=
+      eval "$keydef"
+      if [ -z "$name" ] || [ -z "$loc" ]; then
+        echo "$prog: malformed @key line: $reposrc" >&2
+        return 1
+      fi
+      ( set -x
+        ${run}curl -fsSL "$loc"
+      ) | (
+        set -x
+        ${run}gpg --dearmor --yes -o "/usr/share/keyrings/$name.gpg"
+      )
+    done
+}
+
+install_deb() {
+  local reponame="$1" reposrc="$2"
+  local src
+
+  awk '$1 == "#@deb" { print($2) }' "$reposrc" |
+    while read src; do
+      if [ -z "$src" ]; then
+        echo "$prog: malformed @deb line: $reposrc" >&2
+        return 1
+      fi
+      src="$( echo -n "$src" | replace_distro_info )"
+      local deb="/tmp/${src##*/}"
+      ( trap "rm -f '$deb'" EXIT
+        set -x
+        ${run}curl -fsSL -o "$deb" "$src"
+        ${run}dpkg -i --force-confmiss "$deb"
+      )
+    done
+}
+
+install_ppa() {
+  local reponame="$1" reposrc="$2"
+  local src
+
+  awk '$1 == "#@ppa" { print($2) }' "$reposrc" |
+    while read src; do
+      if [ -z "$src" ]; then
+        echo "$prog: malformed @ppa line: $reposrc" >&2
+        return 1
+      fi
+      ( set -x
+        ${run}add-apt-repository "$src"
+      )
+    done
+}
+
+install_sources() {
+  local reponame="$1" reposrc="$2"
+  if grep -q '^#@sources[[:space:]]*$' "$reposrc"; then
+    sed '1,\!^#@sources!d; \!^#!d; \!^\s*$!d' "$reposrc" |
+      replace_distro_info | (
+      set -x
+      ${run}install /dev/stdin "/etc/apt/sources.list.d/$reponame.list"
+    )
+  fi
+}
+
+add_repo__apt_install() {
+  local opts="$1"
+  shift
+  ensure_root
+  local reponame
+  for reponame in "$@"; do
+    local reposrc="$( find_reposrc "$reponame" )"
+    if [ -z "$reposrc" ]; then
+      return 1
+    fi
+    echo "## setup repository '$reponame' : $reposrc" >&2
+    install_gpg_keys "$reponame" "$reposrc"
+    install_deb "$reponame" "$reposrc"
+    install_ppa "$reponame" "$reposrc"
+    install_sources "$reponame" "$reposrc"
+  done
+
+  case "$opts" in
+    *:no-update:*)
+      ;;
+    *)
+      ( set -x
+        ${run}apt-get update -q
+      )
+      ;;
+  esac
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version,dry-run,file:,list,install,no-update --options hf:l -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: invalid parameter (use -h for help)" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  export ARCH="$( dpkg --print-architecture )"
+  export ID= VERSION_ID= VERSION_CODENAME=
+  . /etc/os-release
+
+  local op src opts
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --list|-l)
+        op=list
+        ;;
+      --file|-f)
+        src="$2"
+        shift
+        ;;
+      --install)
+        case "$ID" in
+          ubuntu)
+            op=apt_install
+            ;;
+          *)
+            # 現在は ubuntu のみ
+            echo "$prog: unknown linux distribution: $ID" >&2
+            return 1
+            ;;
+        esac
+        ;;
+      --no-update)
+        opts="$opts:no-update:"
+        ;;
+      --)
+        shift
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if [ -z "$op" ]; then
+    if [ $# -gt 0 ]; then
+      op=apt_install
+    else
+      op=list
+    fi
+  fi
+  "add_repo__$op" "$opts" "$@"
+}
+
+main "$@"

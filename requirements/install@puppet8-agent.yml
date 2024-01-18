@@ -1,0 +1,14 @@
+#// see: https://www.puppet.com/docs/puppet/8/install_puppet.html#enable_the_puppet_platform_apt
+
+# ubuntu	package		version
+# ------	-------		-------
+# 23.04		puppet		7.23.0-1
+# 22.04 LTS	puppet		5.5.22-4ubuntu0.2
+# 21.10		puppet		5.5.22-1ubuntu1
+# 20.04 LTS	puppet		5.5.10-4ubuntu3
+# 19.10		puppet		5.4.0-2ubuntu3 all
+# 18.04 LTS	puppet		5.4.0-2ubuntu3
+---
+packages::ubuntu:
+  repo:puppet: repo:puppet8
+  puppet-agent: puppet-agent

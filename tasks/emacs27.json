@@ -1,0 +1,24 @@
+{
+  "description": "Install emacs27-nox",
+  "private": true,
+  "input_method": "environment",
+  "supports_noop": true,
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/install@emacs27"},
+    "args": {"default": "" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/install@emacs27",
+    "sysprep/tasks/requirements/install@emacs27.yml",
+    "sysprep/tasks/requirements/install@emacs27.hook",
+    "sysprep/tasks/requirements/install@emacs",
+    "sysprep/tasks/requirements/install@emacs.yml",
+    "sysprep/tasks/requirements/install@",
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/emacs.ubuntu"
+  ]
+}

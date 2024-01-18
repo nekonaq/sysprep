@@ -1,0 +1,80 @@
+#!/bin/sh
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
+prog="${0##*/}"
+
+RCSID='$Id: ssh-known-hosts,v 1.3 2024/01/18 21:15:18 nak Exp nak $'
+
+usage() {
+  cat <<EOF
+Usage:
+  $prog [OPTION...] [DOMAIN...]
+
+ssh-keyscan を使って DOMAIN からホスト・キーを取得し、~/.ssh/known_hosts に追加する。
+
+Options:
+  -t TYPE              取得するキーの種類。 ssh-keyscan の引数と同じ。
+
+  -h, --help           このヘルプを表示する。
+  --version            バージョンを表示する。
+
+EOF
+}
+
+print_version() {
+  local version="$( echo "$RCSID" | awk '{ print $3, gensub(/\//, "-", "g", $4)}' )"
+  if [ -z "${version# }" ]; then
+    version="wip-$( date -Id )"
+  fi
+  echo "$prog $version\n$COPYING"
+}
+
+main() {
+  ARGS=$( getopt --name $prog --long help,version --options ht: -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: invalid parameter (use -h for help)" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  local key_type
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit
+        ;;
+      --version)
+        print_version
+        exit
+        ;;
+      -t)
+        key_type="$2"
+        shift
+        ;;
+      --)
+        shift; break
+        ;;
+    esac
+    shift
+  done
+
+  local known_hosts="$HOME/.ssh/known_hosts"
+  local dom
+  for dom in "$@"; do
+    ( set -x
+      ssh-keyscan ${key_type:+-t "$key_type"} "$dom" >>"$known_hosts"
+    )
+  done
+  gawk -i inplace '!a[$0]++' "$known_hosts"
+}
+
+main "$@"
+
+# Local Variables:
+# fill-column: 84
+# End:

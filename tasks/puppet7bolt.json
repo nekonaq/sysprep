@@ -1,0 +1,21 @@
+{
+  "description": "Install puppet7-{bolt,agent}",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/install@puppet7-bolt"},
+    "args": {"default": "" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/install@puppet7-bolt",
+    "sysprep/tasks/requirements/install@puppet7-bolt.yml",
+    "sysprep/tasks/requirements/install@",
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/puppet7.ubuntu"
+  ]
+}

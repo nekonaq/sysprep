@@ -1,0 +1,21 @@
+{
+  "description": "Install puppet8-agent",
+  "private": true,
+  "supports_noop": true,
+  "input_method": "environment",
+  "implementations": [
+    {"name": "run@", "requirements": ["shell"]}
+  ],
+  "parameters": {
+    "exec": {"default": "sysprep/tasks/requirements/install@puppet8-agent"},
+    "args": {"default": "" }
+  },
+  "files": [
+    "sysprep/tasks/requirements/install@puppet8-agent",
+    "sysprep/tasks/requirements/install@puppet8-agent.yml",
+    "sysprep/tasks/requirements/install@",
+    "sysprep/tasks/requirements/packages",
+    "sysprep/tasks/requirements/add-repo",
+    "sysprep/tasks/requirements/add-repo.d/puppet8.ubuntu"
+  ]
+}
