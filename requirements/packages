@@ -12,6 +12,10 @@ run="${PT__noop:+: }"
 
 RCSID='$Id: packages,v 3.2 2024/01/24 22:07:33 nak Exp nak $'
 
+export ARCH="$( dpkg --print-architecture )"
+export ID= VERSION_ID= VERSION_CODENAME=
+. /etc/os-release
+
 usage() {
   cat <<EOF
 Usage: $prog [OPTION...]
@@ -22,7 +26,7 @@ yaml で記述したパッケージ定義を元に、パッケージをインス
 
 Options:
    --list            インストールするパッケージの一覧を表示する。(デフォルト)
-   --install         パッケージをインストールする。
+   -I, --install     パッケージをインストールする。
    -f, --file=PATH   パッケージ定義ファイルを指定する。
    --pre-update, --update
                      最初に apt-get update する。
@@ -76,7 +80,7 @@ for osver in sys.argv[1:]:
 ' "$@"
 }
 
-list_absent_packages() {
+apt_list_absent_packages() {
   # インストールされていないパッケージの一覧を返す
   local pkg
   for pkg in "$@"; do
@@ -84,8 +88,19 @@ list_absent_packages() {
       echo "-- $pkg"
   done |
     awk '!/^.i/ { print $2 }' |
-    sort | uniq | paste -sd' '
+    sort | uniq | paste -sd' ' | grep -v '^$'
 }
+
+apt_list_present_packages() {
+  # インストールされているパッケージの一覧を返す
+  local pkg
+  for pkg in "$@"; do
+    dpkg-query -Wf '${db:Status-Abbrev} ${Package}\n' "$pkg" 2>/dev/null ||
+      echo "-- $pkg"
+  done |
+    awk '/^.i/ { print $2 }' |
+    sort | uniq | paste -sd' ' | grep -v '^$'
+}    
 
 packages__list() {
   local opts="$1"
@@ -99,7 +114,19 @@ packages__list() {
         echo "$pkg"
         ;;
     esac
-  done | paste -sd' '
+  done | paste -sd' ' | grep -v '^$'
+}
+
+packages__apt_list_absent() {
+  local opts="$1"
+  shift
+  apt_list_absent_packages "$@"
+}
+
+packages__apt_list_present() {
+  local opts="$1"
+  shift
+  apt_list_present_packages "$@"
 }
 
 packages__apt_update() {
@@ -124,6 +151,12 @@ packages__apt_autoremove() {
   ( set -x
     ${run}apt-get autoremove -yq
   )
+}
+
+packages__apt_install_required() {
+  local opts="$1"
+  shift
+  [ "$( apt_list_absent_packages "$@" | wc -w )" -gt 0 ]
 }
 
 packages__apt_install() {
@@ -184,19 +217,54 @@ packages__apt_install() {
     )
   done
 
-  local required="$( list_absent_packages $pkgs "$@" )"
-  eval set -- $required
+  eval set -- $( apt_list_absent_packages $pkgs "$@" )
   if [ $# -le 0 ]; then
     echo "$prog: no packages installed" >&2
   else
     ( set -x
-      export \
-        DEBIAN_FRONTEND=noninteractive \
-        DEBIAN_PRIORITY=critical \
-        DEBCONF_NONINTERACTIVE_SEEN=true \
-        DEBCONF_NOWARNINGS=yes \
-      ;
       ${run}apt-get install -yq "$@"
+    )
+  fi
+
+  case "$opts" in
+    *:autoremove:*)
+      packages__apt_autoremove "$opts"
+      ;;
+  esac
+}
+
+packages__apt_purge_required() {
+  local opts="$1"
+  shift
+  [ "$( apt_list_present_packages "$@" | wc -w )" -gt 0 ]
+}
+
+packages__apt_purge() {
+  local opts="$1"
+  shift
+  ensure_root
+
+  local repos debs pkgs
+  for pkg in $@; do
+    case "$pkg" in
+      repo:*)
+        # skip
+        ;;
+      *.deb)
+        # skip
+        ;;
+      *)
+        pkgs="$pkgs $pkg"
+        ;;
+    esac
+  done
+
+  eval set -- $( apt_list_present_packages $pkgs "$@" )
+  if [ $# -le 0 ]; then
+    echo "$prog: no packages purged" >&2
+  else
+    ( set -x
+      ${run}apt-get purge -yq "$@"
     )
   fi
 
@@ -210,6 +278,14 @@ packages__apt_install() {
 main() {
   if [ -n "$PT__task" ]; then
     exec 2>&1
+
+    local epp_arg='<%= $op %>'
+    case "$epp_arg" in
+      \<*) ;;
+      *)
+        set -- -X "--$epp_arg" "$@"
+        ;;
+    esac
 
     case "$PT_autoremove" in
       yes|true|on)
@@ -225,19 +301,15 @@ main() {
         set -- --dist-upgrade "$@"
     esac
 
-    set -- "$@" $PT_add
+    set -- "$@" $PT_packages
   fi
 
-  ARGS=$( getopt --name $prog --long help,version,dry-run,file:,list,install,pre-update,update,autoremove,upgrade,dist-upgrade --options hf:l -- "$@" )
+  ARGS=$( getopt --name $prog --long help,version,dry-run,file:,list,install,purge,install-required,purge-required,list-absent,list-present,pre-update,update,autoremove,upgrade,dist-upgrade --options hf:lIX -- "$@" )
   if [ $? != 0 ]; then
     echo "$prog: invalid parameter (use -h for help)" >&2
     exit 2
   fi
   eval set -- "$ARGS"
-
-  export ARCH="$( dpkg --print-architecture )"
-  export ID= VERSION_ID= VERSION_CODENAME=
-  . /etc/os-release
 
   local op=list src="$0.yml" opts
   while [ $# -gt 0 ]; do
@@ -253,14 +325,14 @@ main() {
       --dry-run)
         run=': '
         ;;
-      --list|-l)
+      -l|--list)
         op=list
         ;;
-      --file|-f)
+      -f|--file)
         src="$2"
         shift
         ;;
-      --install)
+      -I|--install)
         case "$ID" in
           ubuntu)
             op=apt_install
@@ -272,6 +344,19 @@ main() {
             ;;
         esac
         ;;
+      --purge)
+        case "$ID" in
+          ubuntu)
+            op=apt_purge
+            ;;
+          *)
+            # 現在は ubuntu のみ
+            echo "$prog: unknown linux distribution: $ID" >&2
+            return 1
+            ;;
+        esac
+        ;;
+
       --pre-update|--update)
         opts="$opts:pre-update:"
         ;;
@@ -284,6 +369,23 @@ main() {
       --dist-upgrade)
         opts="$opts:dist-upgrade:"
         ;;
+
+      -X)                                  # undoc
+        src=
+        ;;
+      --install-required)                  # undoc; ubuntu のみ
+        op=apt_install_required
+        ;;
+      --purge-required)                    # undoc; ubuntu のみ
+        op=apt_purge_required
+        ;;
+      --list-absent)                       # undoc; ubuntu のみ
+        op=apt_list_absent
+        ;;
+      --list-present)                      # undoc; ubuntu のみ
+        op=apt_list_present
+        ;;
+
       --)
         shift
         break
@@ -292,15 +394,25 @@ main() {
     shift
   done
 
-  local packages="$(
-    get_packages "$src" "$ID$VERSION_ID" "$ID${VERSION_ID%%.*}" "$ID"
-  )"
-  if [ -z "$packages" ]; then
-    echo "$prog: no package definition for distro: $ID$VERSION_ID" >&2
-    return 1
+  local packages
+  if [ -n "$src" ]; then
+    packages="$(
+      get_packages "$src" "$ID$VERSION_ID" "$ID${VERSION_ID%%.*}" "$ID"
+    )"
+    if [ -z "$packages" ]; then
+      echo "$prog: no package definition for distro: $ID$VERSION_ID" >&2
+      return 1
+    fi
   fi
 
   set -- "$@" $packages
+
+  export \
+    DEBIAN_FRONTEND=noninteractive \
+    DEBIAN_PRIORITY=critical \
+    DEBCONF_NONINTERACTIVE_SEEN=true \
+    DEBCONF_NOWARNINGS=yes \
+  ;
   "packages__$op" "$opts" "$@"
 }
 

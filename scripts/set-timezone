@@ -49,35 +49,26 @@ get_timezone() {
   echo "$tz"
 }
 
-timezone__() {
-  local value="$1"
-  if [ -z "$value" ]; then
-    timezone__show
-    return
-  fi
-  timezone__test "$value"
-}
-
 timezone__show() {
   local value="$1"
   echo "timezone: [$( get_timezone )]"
 }
 
-timezone__test() {
+timezone__eq() {
   local value="$1"
   [ "$value" = "$( get_timezone )" ]
 }
 
 timezone__update() {
   local value="$1"
-  if ! timezone__test "$value"; then
+  if ! timezone__eq "$value"; then
     timezone__set "$value"
   fi
 }
 
 timezone__set() {
   local timezone="$1"
-  ensure_root
+  ${run}ensure_root
   ( set -x
     ${run}timedatectl set-timezone "$timezone"
   ) || (
@@ -105,7 +96,7 @@ main() {
     esac
   fi
 
-  ARGS=$( getopt --name $prog --long help,version,dry-run,test --options h -- "$@" )
+  ARGS=$( getopt --name $prog --long help,version,dry-run,eq --options h -- "$@" )
   if [ $? != 0 ]; then
     echo "$prog: getopt error occured: $?" >&2
     exit 2
@@ -123,8 +114,8 @@ main() {
         print_version
         return
         ;;
-      --test)
-        op=test
+      --eq)
+        op=eq
         ;;
       --dry-run)
         run=': '

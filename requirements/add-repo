@@ -10,6 +10,10 @@ run=
 
 RCSID='$Id: add-repo,v 1.6 2024/01/24 22:06:21 nak Exp nak $'
 
+export ARCH="$( dpkg --print-architecture )"
+export ID= VERSION_ID= VERSION_CODENAME=
+. /etc/os-release
+
 usage() {
   cat <<EOF
 Usage: $prog [OPTION...] REPO...
@@ -183,10 +187,6 @@ main() {
     exit 2
   fi
   eval set -- "$ARGS"
-
-  export ARCH="$( dpkg --print-architecture )"
-  export ID= VERSION_ID= VERSION_CODENAME=
-  . /etc/os-release
 
   local op src opts
   while [ $# -gt 0 ]; do

@@ -80,9 +80,7 @@ EOF
     ) >&2
   fi
 
-  ( set -x
-    exec "$PT__installdir/$task" ${PT__noop:+--dry-run} $PT_args
-  )
+  exec "$PT__installdir/$task" ${PT__noop:+--dry-run} $PT_args
 }
 
 main "$@"

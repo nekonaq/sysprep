@@ -1,7 +1,12 @@
 #!/bin/sh
-set -e
+set -e +x
+COPYING="$( cat <<'EOF'
+Copyright 2023 tnak@nekonaq.com
+License Apache 2.0: <http://www.apache.org/licenses/LICENSE-2.0>
+EOF
+)"
 prog="${0##*/}"
-run=
+run="${PT__noop:+: }"
 
 RCSID='$Id: create-login-account,v 2.7 2023/11/08 18:49:35 nak Exp nak $'
 
@@ -48,7 +53,7 @@ print_version() {
   if [ -z "${version# }" ]; then
     version="wip-$( date -Id -r "$0" )"
   fi
-  echo "$prog $version"
+  echo "$prog $version\n$COPYING"
 }
 
 ensure_root() {
@@ -58,22 +63,44 @@ ensure_root() {
   fi
 }
 
-add_wheel_group() {
-  if ! getent group wheel >/dev/null; then
-    ( set -x
-      ${run}groupadd -g 11 wheel
-    )
-  fi
+wheel_group__exists() {
+  getent group wheel >/dev/null
 }
 
-add_wheel_sudoers() {
-  local dest=/etc/sudoers.d/wheel
-  if [ ! -e "$dest" ]; then
-    ( set -x
-      ${run}install -o root -g root -m 644 /dev/stdin "$dest" <<EOF
+wheel_group__add() {
+  ( set -x
+    ${run}groupadd -g 11 wheel
+  )
+}
+
+WHEEL_SUDOERS_FILE=/etc/sudoers.d/wheel
+
+wheel_sudoers__exists() {
+  [ -e "$WHEEL_SUDOERS_FILE" ]
+}
+
+wheel_sudoers__add() {
+  ( cat <<EOF
 %wheel ALL=(ALL) NOPASSWD:ALL
 EOF
-    )
+  ) | (
+    set -x
+    ${run}install -o root -g root -m 644 /dev/stdin "$WHEEL_SUDOERS_FILE"
+  )
+}
+
+wheel__exists() {
+  wheel_group__exists
+  wheel_sudoers__exists
+}
+
+wheel__add() {
+  if ! wheel_group__exists; then
+    wheel_group__add
+  fi
+
+  if ! wheel_sudoers__exists; then
+    wheel_sudoers__add
   fi
 }
 
@@ -164,7 +191,57 @@ add_sshkeys_from() {
   )
 }
 
+task__addwheel() {
+  local epp_arg='<%= $op %>'
+  case "$epp_arg" in
+    \<*) ;;
+    *) PT_op="$epp_arg";;
+  esac
+
+  ARGS=$( getopt --name $prog --long help,version,dry-run,exists --options h -- "$@" )
+  if [ $? != 0 ]; then
+    echo "$prog: getopt error occured: $?" >&2
+    exit 2
+  fi
+  eval set -- "$ARGS"
+
+  local op="${PT_op:-add}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        # usage
+        echo "$prog: sorry, no help available" >&2
+        return
+        ;;
+      --version)
+        print_version
+        return
+        ;;
+      --exists)
+        op=exists
+        ;;
+      --dry-run)
+        run=': '
+        ;;
+      --)
+        shift
+        break
+        ;;
+    esac
+    shift
+  done
+
+  "wheel__$op"
+  return
+}
+
 main() {
+  if [ "$prog" = add-wheel-group ] || [ "${PT__task##*::}" = addwheel ]; then
+    exec 2>&1
+    task__addwheel "$@"
+    return
+  fi
+
   ARGS=$( getopt --name $prog --long help,version,dry-run,wheel,uid:,shell:,groups:,vagrant --options hu:s:G: -- "$@" )
   if [ $? != 0 ]; then
     echo "$prog: getopt error occured: $?" >&2
@@ -214,8 +291,7 @@ main() {
 
   ${run}ensure_root
   if [ -n "$wheel" ]; then
-    add_wheel_group
-    add_wheel_sudoers
+    wheel_group__add
   fi
 
   local user="$1" sshkeys_from="${vagrant:-$2}"

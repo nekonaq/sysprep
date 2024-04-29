@@ -49,35 +49,26 @@ get_locale() {
     awk -F: 'match($0, /LANG=(\S+)$/, ma) {print ma[1]}'
 }
 
-locale__() {
-  local value="$1"
-  if [ -z "$value" ]; then
-    locale__show
-    return
-  fi
-  locale__test "$value"
-}
-
 locale__show() {
   local value="$1"
   echo "locale: [$( get_locale )]"
 }
 
-locale__test() {
+locale__eq() {
   local value="$1"
   [ "$value" = "$( get_locale )" ]
 }
 
 locale__update() {
   local value="$1"
-  if ! locale__test "$value"; then
+  if ! locale__eq "$value"; then
     locale__set "$value"
   fi
 }
 
 locale__set() {
   local locale="$1"
-  ensure_root
+  ${run}ensure_root
   ( set -x
     ${run}localectl set-locale "LANG=$locale"
   ) || (
@@ -99,7 +90,7 @@ main() {
     esac
   fi
 
-  ARGS=$( getopt --name $prog --long help,version,dry-run,test --options h -- "$@" )
+  ARGS=$( getopt --name $prog --long help,version,dry-run,eq --options h -- "$@" )
   if [ $? != 0 ]; then
     echo "$prog: getopt error occured: $?" >&2
     exit 2
@@ -117,8 +108,8 @@ main() {
         print_version
         return
         ;;
-      --test)
-        op=test
+      --eq)
+        op=eq
         ;;
       --dry-run)
         run=': '

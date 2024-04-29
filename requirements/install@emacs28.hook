@@ -2,7 +2,7 @@
 
 conf_hook() {
   local conf="$1"
-  export ID= VERSION_ID= VERSION_CODENAME=
+  local ID= VERSION_ID= VERSION_CODENAME=
   . /etc/os-release
   if [ "${VERSION_ID%%.*}" -le 22 ]; then
     echo "$conf"
